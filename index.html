@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>쯔꾸르 메이커 · RPG Screenshot Maker</title>
+<style>
+  /* ====== FONTS (pixel) — loaded via JS FontFace too, this is a fallback hint ====== */
+  :root{
+    --bg:#0b0f1c;
+    --panel:#121a2e;
+    --panel2:#0e1526;
+    --line:#243150;
+    --ink:#e8ecf7;
+    --muted:#8ea0c4;
+    --accent:#46e0c8;
+    --accent2:#ffcb47;
+    --danger:#ff6b8a;
+    --shadow:0 10px 40px rgba(0,0,0,.45);
+    --pixel:'Galmuri11','DungGeunMo','NeoDunggeunmo',monospace;
+    --ui:'Galmuri11','DungGeunMo',ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #16284d55, transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, #1b3a3555, transparent 60%),
+      var(--bg);
+    color:var(--ink);
+    font-family:var(--ui);
+    -webkit-font-smoothing:none;
+    image-rendering:pixelated;
+  }
+  /* scanline texture on the whole app frame */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:9999;
+    background:repeating-linear-gradient(to bottom, #ffffff05 0 1px, transparent 1px 3px);
+    mix-blend-mode:overlay;opacity:.5;
+  }
+  header.top{
+    display:flex;align-items:center;gap:14px;
+    padding:14px 20px;border-bottom:2px solid var(--line);
+    background:linear-gradient(#101a30,#0c1424);
+    position:sticky;top:0;z-index:50;
+  }
+  .logo{
+    font-family:var(--pixel);font-size:20px;letter-spacing:1px;
+    color:var(--accent);text-shadow:2px 2px 0 #06231e;
+  }
+  .logo b{color:var(--accent2);text-shadow:2px 2px 0 #3a2a00}
+  .tag{color:var(--muted);font-size:12px}
+  .top .right{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+
+  .wrap{
+    display:grid;
+    grid-template-columns:minmax(280px,360px) minmax(0,1fr);
+    gap:clamp(10px,1.6vw,18px);
+    padding:clamp(10px,1.6vw,18px);
+    max-width:1500px;margin:0 auto;align-items:start;
+  }
+  /* preview follows you as you scroll the controls */
+  .panel.preview{
+    position:sticky;
+    top:clamp(64px,8vh,84px);
+    align-self:start;
+    max-height:calc(100vh - 96px);
+    display:flex;flex-direction:column;
+  }
+  .panel.preview > .body{overflow:auto;flex:1 1 auto}
+  @media (max-width:980px){
+    .wrap{grid-template-columns:1fr;gap:10px}
+    .panel.preview{
+      order:-1;                 /* preview on top */
+      top:clamp(46px,7vh,58px); /* sit just below the compact header */
+      max-height:64vh;
+      z-index:30;
+      box-shadow:0 10px 26px rgba(0,0,0,.6);
+    }
+    .panel.preview .hint{display:none}        /* keep the pinned preview compact */
+    .stagebar .btn{flex:1 1 auto;font-size:11px;padding:8px 8px}
+  }
+  @media (max-width:980px){
+    header.top{padding:10px 14px}
+    .top .tag{display:none}
+    .logo{font-size:16px}
+    .top .right .btn{font-size:11px;padding:8px 10px}
+  }
+  @media (max-width:560px){
+    .wrap{padding:8px}
+    .panel.preview{max-height:58vh}
+  }
+
+  .panel{
+    background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:2px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
+    overflow:hidden;
+  }
+  .panel .ttl{
+    font-family:var(--pixel);font-size:13px;letter-spacing:1px;color:var(--accent);
+    padding:10px 14px;border-bottom:1px dashed var(--line);
+    display:flex;align-items:center;gap:8px;
+    background:#0e1730;
+  }
+  .panel .ttl .dot{width:8px;height:8px;background:var(--accent);box-shadow:0 0 8px var(--accent)}
+  .panel .body{padding:14px}
+
+  .controls{display:flex;flex-direction:column;gap:14px}
+
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field > label{font-size:12px;color:var(--muted);letter-spacing:.5px}
+  .row{display:flex;gap:8px;align-items:center}
+  .row.wrap{flex-wrap:wrap}
+
+  input[type="text"], textarea, select{
+    width:100%;background:#0a1122;color:var(--ink);
+    border:2px solid var(--line);border-radius:8px;padding:9px 10px;
+    font-family:var(--ui);font-size:13px;outline:none;
+  }
+  textarea{resize:vertical;min-height:74px;line-height:1.5}
+  input[type="text"]:focus, textarea:focus, select:focus{border-color:var(--accent)}
+  input[type="range"]{width:100%;accent-color:var(--accent)}
+  input[type="color"]{width:40px;height:34px;border:2px solid var(--line);border-radius:8px;background:#0a1122;padding:2px;cursor:pointer}
+
+  .rangewrap{display:flex;align-items:center;gap:10px}
+  .rangewrap .val{font-size:12px;color:var(--accent2);min-width:42px;text-align:right;font-family:var(--pixel)}
+
+  .toggle{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+  .toggle input{appearance:none;width:38px;height:22px;border-radius:20px;background:#27324f;position:relative;cursor:pointer;transition:.15s;border:2px solid var(--line)}
+  .toggle input:checked{background:#114b41;border-color:var(--accent)}
+  .toggle input::after{content:"";position:absolute;top:1px;left:1px;width:16px;height:16px;border-radius:50%;background:#cdd6ee;transition:.15s}
+  .toggle input:checked::after{left:17px;background:var(--accent)}
+  .toggle span{font-size:12px;color:var(--muted)}
+
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{
+    font-size:11px;padding:6px 9px;border:2px solid var(--line);border-radius:999px;
+    background:#0a1122;color:var(--muted);cursor:pointer;letter-spacing:.5px;
+  }
+  .chip.active{border-color:var(--accent);color:var(--accent);box-shadow:inset 0 0 12px #46e0c822}
+
+  .btn{
+    font-family:var(--pixel);font-size:12px;letter-spacing:.5px;cursor:pointer;
+    border:2px solid var(--line);background:#0a1122;color:var(--ink);
+    padding:9px 12px;border-radius:9px;transition:.12s;white-space:nowrap;
+  }
+  .btn:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .btn.primary{background:linear-gradient(#11514a,#0c3a35);border-color:var(--accent);color:#d6fff6}
+  .btn.gold{background:linear-gradient(#4a3a0c,#2f2606);border-color:var(--accent2);color:#fff1c8}
+  .btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+
+  .upload{
+    border:2px dashed var(--line);border-radius:10px;padding:14px;text-align:center;
+    cursor:pointer;color:var(--muted);font-size:12px;transition:.12s;background:#0a112255;
+  }
+  .upload:hover{border-color:var(--accent);color:var(--accent)}
+  .upload b{color:var(--ink)}
+  .upload.has{border-style:solid;border-color:var(--accent);color:var(--accent)}
+
+  /* ===== preview ===== */
+  .stage{
+    display:flex;flex-direction:column;gap:12px;align-items:center;
+  }
+  .canvas-frame{
+    width:100%;max-width:900px;background:#000;border:2px solid var(--line);border-radius:12px;
+    box-shadow:var(--shadow);overflow:hidden;position:relative;
+  }
+  #canvas{display:block;width:100%;height:auto;background:#05070d;image-rendering:pixelated}
+  .stagebar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%}
+  .hint{font-size:11px;color:var(--muted);text-align:center;line-height:1.6}
+  .badge{font-size:10px;color:var(--accent);border:1px solid var(--line);border-radius:6px;padding:2px 6px}
+
+  .empty{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;
+    color:var(--muted);font-size:13px;text-align:center;padding:24px;background:#05070d;
+  }
+  .empty .big{font-family:var(--pixel);font-size:16px;color:var(--accent)}
+
+  details{border:1px solid var(--line);border-radius:8px;background:#0a112255}
+  summary{cursor:pointer;padding:8px 10px;font-size:12px;color:var(--accent);font-family:var(--pixel)}
+  details[open]{padding-bottom:6px}
+  details .inner{padding:0 10px 8px;display:flex;flex-direction:column;gap:12px}
+
+  .footer{padding:18px;text-align:center;color:var(--muted);font-size:11px;border-top:2px solid var(--line);margin-top:8px}
+  .footer code{color:var(--accent2)}
+
+  #toast{
+    position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
+    background:#0e1730;border:2px solid var(--accent);color:#d6fff6;
+    padding:10px 16px;border-radius:10px;font-size:12px;opacity:0;pointer-events:none;
+    transition:.2s;z-index:10000;box-shadow:var(--shadow);font-family:var(--pixel)
+  }
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .gifbar{display:none;width:100%;max-width:900px}
+  .gifbar.show{display:block}
+  .progress{height:10px;background:#0a1122;border:2px solid var(--line);border-radius:8px;overflow:hidden}
+  .progress > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:.1s}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="logo">▶ 쯔꾸르 <b>메이커</b></div>
+  <div class="tag">사진 → 도트화 → 메시지 창 → 한 장의 RPG 스크린샷 / GIF</div>
+  <div class="right">
+    <button class="btn" id="randomBtn">🎲 데모 채우기</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <!-- ============ CONTROLS ============ -->
+  <div class="panel">
+    <div class="ttl"><span class="dot"></span> 편집기</div>
+    <div class="body controls">
+
+      <!-- background -->
+      <div class="field">
+        <label>배경 사진</label>
+        <div class="upload" id="bgUpload">
+          <div><b>이미지 올리기</b> (클릭 / 드래그)</div>
+          <div id="bgName">아직 없음 — 도트화될 사진을 넣어줘</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>도트화 강도 (픽셀 크기)</label>
+        <div class="rangewrap">
+          <input type="range" id="pixelSize" min="1" max="20" step="1" value="6">
+          <span class="val" id="pixelSizeV">6px</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>색 단계 (레트로 팔레트)</label>
+        <div class="rangewrap">
+          <input type="range" id="levels" min="2" max="32" step="1" value="8">
+          <span class="val" id="levelsV">8</span>
+        </div>
+      </div>
+
+      <div class="row wrap">
+        <label class="toggle"><input type="checkbox" id="dither" checked><span>디더링</span></label>
+        <label class="toggle"><input type="checkbox" id="scanline" checked><span>스캔라인</span></label>
+        <label class="toggle"><input type="checkbox" id="vignette" checked><span>비네팅</span></label>
+      </div>
+
+      <!-- text -->
+      <div class="field">
+        <label>대사</label>
+        <textarea id="dialogue" placeholder="여기에 대사를 입력... 줄바꿈도 가능!"></textarea>
+      </div>
+
+      <div class="field">
+        <label>화자 이름</label>
+        <div class="row">
+          <input type="text" id="speaker" placeholder="이름 (비우면 이름 창 숨김)" value="">
+          <input type="color" id="nameColor" value="#ffcb47" title="이름 색">
+        </div>
+      </div>
+
+      <!-- window theme -->
+      <div class="field">
+        <label>메시지 창 테마</label>
+        <div class="chips" id="themeChips">
+          <div class="chip active" data-theme="classic">클래식 블루</div>
+          <div class="chip" data-theme="dark">다크</div>
+          <div class="chip" data-theme="parchment">양피지</div>
+          <div class="chip" data-theme="rose">로즈</div>
+          <div class="chip" data-theme="mono">흑백</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>창 투명도</label>
+        <div class="rangewrap">
+          <input type="range" id="boxOpacity" min="40" max="100" step="1" value="86">
+          <span class="val" id="boxOpacityV">86%</span>
+        </div>
+      </div>
+
+      <!-- face -->
+      <div class="field">
+        <label>얼굴 그래픽 (초상화)</label>
+        <div class="upload" id="faceUpload">
+          <div><b>얼굴 이미지 올리기</b> (선택)</div>
+          <div id="faceName">없음</div>
+        </div>
+        <div class="row wrap" style="margin-top:4px">
+          <div class="chips" id="faceSideChips">
+            <div class="chip active" data-side="left">왼쪽</div>
+            <div class="chip" data-side="right">오른쪽</div>
+          </div>
+          <button class="btn" id="faceClear" style="margin-left:auto">얼굴 추가</button>
+        </div>
+      </div>
+
+      <!-- font -->
+      <details>
+        <summary>⚙ 폰트 / 타자기 / 고급</summary>
+        <div class="inner">
+          <div class="field">
+            <label>픽셀 폰트</label>
+            <select id="fontSel">
+              <option value="Galmuri11">갈무리 11</option>
+              <option value="Galmuri14">갈무리 14</option>
+              <option value="DungGeunMo">둥근모 (DungGeunMo)</option>
+              <option value="NeoDunggeunmo">네오둥근모</option>
+              <option value="monospace">시스템 모노</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>글자 크기</label>
+            <div class="rangewrap">
+              <input type="range" id="fontSize" min="16" max="48" step="1" value="26">
+              <span class="val" id="fontSizeV">26</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>타자기 속도 (글자당 ms)</label>
+            <div class="rangewrap">
+              <input type="range" id="typeSpeed" min="10" max="160" step="5" value="45">
+              <span class="val" id="typeSpeedV">45</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>화면 비율</label>
+            <div class="chips" id="ratioChips">
+              <div class="chip active" data-ratio="4:3">4:3 (정통)</div>
+              <div class="chip" data-ratio="16:9">16:9</div>
+              <div class="chip" data-ratio="1:1">1:1</div>
+            </div>
+          </div>
+          <label class="toggle"><input type="checkbox" id="showArrow" checked><span>▼ 계속 화살표 표시</span></label>
+
+          <div class="field">
+            <label>선택지 (한 줄에 하나, 비우면 숨김)</label>
+            <textarea id="choices" placeholder="예)&#10;다가간다&#10;도망친다&#10;아무것도 하지 않는다"></textarea>
+          </div>
+        </div>
+      </details>
+
+    </div>
+  </div>
+
+  <!-- ============ PREVIEW ============ -->
+  <div class="panel preview">
+    <div class="ttl"><span class="dot"></span> 미리보기 <span class="badge" id="sizeBadge">—</span></div>
+    <div class="body">
+      <div class="stage">
+        <div class="canvas-frame" id="frame">
+          <canvas id="canvas" width="816" height="624"></canvas>
+          <div class="empty" id="empty">
+            <div class="big">사진을 넣어줘!</div>
+            <div>왼쪽에서 배경 이미지를 올리면<br>바로 도트화 + 메시지 창이 합성돼.</div>
+          </div>
+        </div>
+
+        <div class="stagebar">
+          <button class="btn primary" id="playBtn">▶ 타자기 재생</button>
+          <button class="btn" id="fullBtn">전체 표시</button>
+          <button class="btn gold" id="pngBtn">🖼 PNG 저장</button>
+          <button class="btn gold" id="gifBtn">🎞 GIF 저장</button>
+        </div>
+
+        <div class="gifbar" id="gifbar">
+          <div class="progress"><i id="gifProg"></i></div>
+          <div class="hint" id="gifMsg" style="margin-top:6px">GIF 생성 중…</div>
+        </div>
+
+        <div class="hint">
+          모든 합성은 <b>브라우저 안에서</b> 처리돼 — 사진은 서버로 안 올라가.<br>
+          저장한 PNG/GIF를 그대로 깃허브 README나 SNS에 붙이면 됨.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  단일 HTML 파일 · GitHub Pages에 그대로 올리면 동작 ·
+  폰트 <code>갈무리/둥근모</code>, GIF <code>gif.js</code> 사용
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ---------------- state ----------------
+  const S = {
+    bgImg:null, faceImg:null,
+    pixelSize:6, levels:8, dither:true, scanline:true, vignette:true,
+    dialogue:"", speaker:"", nameColor:"#ffcb47",
+    theme:"classic", boxOpacity:0.86,
+    faceSide:"left",
+    font:"Galmuri11", fontSize:26, typeSpeed:45,
+    ratio:"4:3", showArrow:true, choices:[],
+  };
+
+  const THEMES = {
+    classic:   { fill:["#1b3a8f","#0c1c4d"], border:"#cfe0ff", inner:"#7fa8ff", text:"#ffffff", nameBox:"#10204f" },
+    dark:      { fill:["#10131c","#05070d"], border:"#3a4360", inner:"#6b7798", text:"#e8ecf7", nameBox:"#0a0d15" },
+    parchment: { fill:["#e8d6a8","#caa86a"], border:"#5a3d1c", inner:"#a07a3c", text:"#3a2a12", nameBox:"#b89a5c" },
+    rose:      { fill:["#7a2046","#3d0f24"], border:"#ffd0e0", inner:"#ff7fb0", text:"#fff0f5", nameBox:"#4d1430" },
+    mono:      { fill:["#202020","#000000"], border:"#ffffff", inner:"#888888", text:"#ffffff", nameBox:"#111111" },
+  };
+
+  const RATIOS = { "4:3":[816,624], "16:9":[1024,576], "1:1":[720,720] };
+
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  let bgCache = null;   // pixelated background canvas (full size)
+  let faceCache = null; // pixelated face canvas
+
+  // ---------------- font loading ----------------
+  const FONTS = [
+    { fam:"Galmuri11",   url:"https://cdn.jsdelivr.net/npm/galmuri/dist/Galmuri11.woff2" },
+    { fam:"Galmuri14",   url:"https://cdn.jsdelivr.net/npm/galmuri/dist/Galmuri14.woff2" },
+    { fam:"DungGeunMo",  url:"https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2001@1.1/DungGeunMo.woff" },
+    { fam:"NeoDunggeunmo", url:"https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2206-01@1.0/NeoDunggeunmoPro-Regular.woff2" },
+  ];
+  const loadedFonts = new Set(["monospace"]);
+  function loadFonts(){
+    FONTS.forEach(f=>{
+      try{
+        const ff = new FontFace(f.fam, `url(${f.url})`);
+        ff.load().then(face=>{ document.fonts.add(face); loadedFonts.add(f.fam); render(); })
+                 .catch(()=>{});
+      }catch(e){}
+    });
+  }
+  function cssFont(px){
+    const fam = loadedFonts.has(S.font) ? S.font : (loadedFonts.has("Galmuri11") ? "Galmuri11" : "monospace");
+    return `${px}px '${fam}', monospace`;
+  }
+
+  // ---------------- helpers ----------------
+  function $(id){ return document.getElementById(id); }
+  function toast(msg){
+    const t=$('toast'); t.textContent=msg; t.classList.add('show');
+    clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1800);
+  }
+  function loadImageFromFile(file, cb){
+    const r=new FileReader();
+    r.onload=e=>{ const im=new Image(); im.onload=()=>cb(im); im.src=e.target.result; };
+    r.readAsDataURL(file);
+  }
+
+  // cover-fit an image into target w/h -> returns crop rect in source
+  function coverRect(img, tw, th){
+    const ir=img.width/img.height, tr=tw/th; let sw,sh,sx,sy;
+    if(ir>tr){ sh=img.height; sw=sh*tr; sx=(img.width-sw)/2; sy=0; }
+    else { sw=img.width; sh=sw/tr; sx=0; sy=(img.height-sh)/2; }
+    return [sx,sy,sw,sh];
+  }
+
+  const BAYER = [
+    [0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]
+  ]; // 4x4 ordered dither (0..15)
+
+  // produce a pixelated + posterized canvas the size of target
+  function pixelate(img, tw, th, opts){
+    const px = Math.max(1, opts.pixelSize|0);
+    const sw = Math.max(1, Math.round(tw/px));
+    const sh = Math.max(1, Math.round(th/px));
+    const small = document.createElement('canvas'); small.width=sw; small.height=sh;
+    const sc = small.getContext('2d');
+    const [cx,cy,cw,ch] = coverRect(img, tw, th);
+    sc.imageSmoothingEnabled = true;
+    sc.drawImage(img, cx,cy,cw,ch, 0,0, sw,sh);
+
+    // posterize + ordered dither
+    const levels = Math.max(2, opts.levels|0);
+    const id = sc.getImageData(0,0,sw,sh); const d=id.data;
+    const step = 255/(levels-1);
+    for(let y=0;y<sh;y++){
+      for(let x=0;x<sw;x++){
+        const i=(y*sw+x)*4;
+        const dith = opts.dither ? (BAYER[y&3][x&3]/16 - 0.5)*step : 0;
+        for(let c=0;c<3;c++){
+          let v=d[i+c]+dith;
+          v=Math.round(v/step)*step;
+          d[i+c]=v<0?0:v>255?255:v;
+        }
+      }
+    }
+    sc.putImageData(id,0,0);
+
+    // upscale nearest-neighbor to target
+    const out=document.createElement('canvas'); out.width=tw; out.height=th;
+    const oc=out.getContext('2d'); oc.imageSmoothingEnabled=false;
+    oc.drawImage(small, 0,0,sw,sh, 0,0,tw,th);
+    return out;
+  }
+
+  function rebuildBg(){
+    if(!S.bgImg){ bgCache=null; return; }
+    const [w,h]=RATIOS[S.ratio];
+    bgCache = pixelate(S.bgImg, w, h, S);
+  }
+  function rebuildFace(){
+    if(!S.faceImg){ faceCache=null; return; }
+    // square face, pixelated
+    const size=256;
+    faceCache = pixelate(S.faceImg, size, size, {pixelSize:Math.max(2,Math.round(S.pixelSize*0.7)), levels:S.levels, dither:S.dither});
+  }
+
+  // word/char wrap for canvas, honoring \n
+  function wrapLines(text, maxW, fontPx){
+    ctx.font = cssFont(fontPx);
+    const out=[];
+    const paras = text.split('\n');
+    for(const p of paras){
+      if(p===''){ out.push(''); continue; }
+      let line='';
+      for(const ch of p){
+        const test=line+ch;
+        if(ctx.measureText(test).width>maxW && line!==''){ out.push(line); line=ch; }
+        else line=test;
+      }
+      out.push(line);
+    }
+    return out;
+  }
+
+  // rounded rect path
+  function rr(c,x,y,w,h,r){
+    c.beginPath();
+    c.moveTo(x+r,y);
+    c.arcTo(x+w,y,x+w,y+h,r);
+    c.arcTo(x+w,y+h,x,y+h,r);
+    c.arcTo(x,y+h,x,y,r);
+    c.arcTo(x,y,x+w,y,r);
+    c.closePath();
+  }
+
+  // ---------------- typewriter playback ----------------
+  let anim={playing:false, t0:0, total:0, reveal:0, raf:0};
+  function totalChars(){ return [...S.dialogue].length; }
+
+  function play(){
+    anim.playing=true; anim.t0=performance.now(); anim.total=totalChars();
+    cancelAnimationFrame(anim.raf); loop();
+  }
+  function loop(){
+    const now=performance.now();
+    const shown=Math.min(anim.total, Math.floor((now-anim.t0)/S.typeSpeed));
+    anim.reveal=shown;
+    render(shown);
+    if(shown<anim.total){ anim.raf=requestAnimationFrame(loop); }
+    else { anim.playing=false; render(anim.total); }
+  }
+  function showFull(){ anim.playing=false; cancelAnimationFrame(anim.raf); render(totalChars()); }
+
+  // ---------------- main render ----------------
+  function render(reveal){
+    const [W,H]=RATIOS[S.ratio];
+    if(canvas.width!==W||canvas.height!==H){ canvas.width=W; canvas.height=H; }
+    $('sizeBadge').textContent = W+"×"+H;
+    const hasBg = !!bgCache;
+    $('empty').style.display = hasBg ? 'none':'flex';
+    if(!hasBg){ ctx.clearRect(0,0,W,H); return; }
+
+    ctx.imageSmoothingEnabled=false;
+    ctx.clearRect(0,0,W,H);
+    ctx.drawImage(bgCache,0,0);
+
+    // vignette
+    if(S.vignette){
+      const g=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.35, W/2,H/2,Math.max(W,H)*0.72);
+      g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.55)');
+      ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    }
+
+    // ----- message window -----
+    const th=THEMES[S.theme];
+    const m = Math.round(W*0.035);                 // outer margin
+    const boxH = Math.round(H*0.30);
+    const bx=m, by=H-boxH-m, bw=W-m*2, bh=boxH;
+    const rad=Math.round(W*0.018);
+
+    ctx.globalAlpha = S.boxOpacity;
+    const grad=ctx.createLinearGradient(0,by,0,by+bh);
+    grad.addColorStop(0,th.fill[0]); grad.addColorStop(1,th.fill[1]);
+    rr(ctx,bx,by,bw,bh,rad); ctx.fillStyle=grad; ctx.fill();
+    ctx.globalAlpha=1;
+
+    // double border (outer + inner) — classic windowskin look
+    ctx.lineWidth=Math.max(3,Math.round(W*0.006)); ctx.strokeStyle=th.border;
+    rr(ctx,bx,by,bw,bh,rad); ctx.stroke();
+    ctx.lineWidth=Math.max(1,Math.round(W*0.0022)); ctx.strokeStyle=th.inner;
+    const pad2=Math.round(W*0.012);
+    rr(ctx,bx+pad2,by+pad2,bw-pad2*2,bh-pad2*2,Math.max(2,rad-pad2)); ctx.stroke();
+
+    // ----- face -----
+    let textX = bx + Math.round(W*0.035);
+    let textW = bw - Math.round(W*0.07);
+    if(faceCache){
+      const fs=Math.round(bh*0.74);
+      const fy=by+(bh-fs)/2;
+      const fx = S.faceSide==='left' ? bx+Math.round(W*0.025) : bx+bw-fs-Math.round(W*0.025);
+      // little frame behind face
+      ctx.fillStyle='rgba(0,0,0,0.35)'; rr(ctx,fx-4,fy-4,fs+8,fs+8,8); ctx.fill();
+      ctx.imageSmoothingEnabled=false;
+      ctx.drawImage(faceCache, fx,fy,fs,fs);
+      ctx.lineWidth=2; ctx.strokeStyle=th.inner; rr(ctx,fx,fy,fs,fs,6); ctx.stroke();
+      if(S.faceSide==='left'){ textX=fx+fs+Math.round(W*0.03); textW=bx+bw-textX-Math.round(W*0.035); }
+      else { textX=bx+Math.round(W*0.035); textW=fx-textX-Math.round(W*0.03); }
+    }
+
+    // ----- name box -----
+    if(S.speaker.trim()){
+      ctx.font=cssFont(Math.round(S.fontSize*0.9));
+      const nm=S.speaker.trim();
+      const nw=ctx.measureText(nm).width+Math.round(W*0.04);
+      const nh=Math.round(S.fontSize*1.5);
+      const nx=bx+Math.round(W*0.025), ny=by-nh*0.55;
+      ctx.globalAlpha=S.boxOpacity;
+      rr(ctx,nx,ny,nw,nh,8); ctx.fillStyle=th.nameBox; ctx.fill();
+      ctx.globalAlpha=1;
+      ctx.lineWidth=2; ctx.strokeStyle=th.border; rr(ctx,nx,ny,nw,nh,8); ctx.stroke();
+      ctx.fillStyle=S.nameColor; ctx.textBaseline='middle'; ctx.textAlign='left';
+      ctx.fillText(nm, nx+Math.round(W*0.02), ny+nh/2+1);
+    }
+
+    // ----- dialogue text (with typewriter reveal) -----
+    const fs=S.fontSize;
+    const lines=wrapLines(S.dialogue, textW, fs);
+    const lineH=Math.round(fs*1.4);
+    let ty=by+Math.round(bh*0.16)+ (S.speaker.trim()?Math.round(fs*0.2):0);
+    if(faceCache) ty=by+Math.round(bh*0.16);
+    ctx.textBaseline='top'; ctx.textAlign='left'; ctx.font=cssFont(fs);
+
+    const rv = (reveal==null)? Number.MAX_SAFE_INTEGER : reveal;
+    let count=0; let lastX=textX, lastY=ty, done=true;
+    for(let li=0; li<lines.length; li++){
+      const ln=lines[li]; const chars=[...ln];
+      let drawn='';
+      for(let ci=0; ci<chars.length; ci++){
+        if(count>=rv){ done=false; break; }
+        drawn+=chars[ci]; count++;
+      }
+      // shadow for readability
+      ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillText(drawn, textX+2, ty+li*lineH+2);
+      ctx.fillStyle=th.text; ctx.fillText(drawn, textX, ty+li*lineH);
+      lastX=textX+ctx.measureText(drawn).width; lastY=ty+li*lineH;
+      if(!done) break;
+      if(ln!=='') count++; // count newline as a tick so reveal feels natural
+    }
+
+    // ----- choices (only when fully revealed) -----
+    if(done && S.choices.length){
+      const cfs=Math.round(fs*0.92);
+      ctx.font=cssFont(cfs);
+      let maxw=0; S.choices.forEach(c=>{ maxw=Math.max(maxw, ctx.measureText(c).width); });
+      const cw=maxw+Math.round(W*0.08);
+      const chh=Math.round(cfs*1.7);
+      const ch=S.choices.length*chh+Math.round(W*0.02);
+      const cxp=bx+bw-cw-Math.round(W*0.03);
+      const cyp=by-ch-Math.round(H*0.02);
+      ctx.globalAlpha=S.boxOpacity;
+      rr(ctx,cxp,cyp,cw,ch,10); ctx.fillStyle=th.fill[1]; ctx.fill(); ctx.globalAlpha=1;
+      ctx.lineWidth=Math.max(2,Math.round(W*0.004)); ctx.strokeStyle=th.border; rr(ctx,cxp,cyp,cw,ch,10); ctx.stroke();
+      ctx.textBaseline='middle';
+      S.choices.forEach((c,i)=>{
+        const yy=cyp+Math.round(W*0.01)+chh*i+chh/2;
+        if(i===0){ // cursor highlight on first
+          ctx.fillStyle='rgba(255,255,255,0.12)';
+          rr(ctx,cxp+6,cyp+Math.round(W*0.01)+chh*i+4,cw-12,chh-8,6); ctx.fill();
+          ctx.fillStyle=th.border; ctx.fillText('▶', cxp+Math.round(W*0.018), yy);
+        }
+        ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillText(c, cxp+Math.round(W*0.05)+2, yy+1);
+        ctx.fillStyle=th.text; ctx.fillText(c, cxp+Math.round(W*0.05), yy);
+      });
+    }
+
+    // ----- continue arrow ▼ (blink) -----
+    if(done && S.showArrow && !S.choices.length){
+      const blink = Math.floor(performance.now()/450)%2===0;
+      if(blink){
+        ctx.fillStyle=th.border; ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+        ctx.font=cssFont(Math.round(fs*0.9));
+        ctx.fillText('▼', bx+bw-Math.round(W*0.05), by+bh-Math.round(bh*0.14));
+      }
+      // keep blinking alive in idle
+      if(!anim.playing){ cancelAnimationFrame(anim._blink); anim._blink=requestAnimationFrame(()=>render(reveal)); }
+    }
+
+    // ----- scanlines over everything -----
+    if(S.scanline){
+      ctx.globalAlpha=0.18; ctx.fillStyle='#000';
+      for(let y=0;y<H;y+=3){ ctx.fillRect(0,y,W,1); }
+      ctx.globalAlpha=1;
+    }
+  }
+
+  // ---------------- PNG export ----------------
+  function exportPNG(){
+    if(!bgCache){ toast('먼저 사진을 넣어줘!'); return; }
+    showFull();
+    requestAnimationFrame(()=>{
+      // render a clean static frame (arrow on)
+      render(totalChars());
+      canvas.toBlob(b=>{
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(b); a.download='tsukuru.png'; a.click();
+        setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+        toast('PNG 저장 완료!');
+      },'image/png');
+    });
+  }
+
+  // ---------------- GIF export ----------------
+  let gifWorkerUrl=null;
+  async function ensureWorker(){
+    if(gifWorkerUrl) return gifWorkerUrl;
+    const res=await fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js');
+    const txt=await res.text();
+    gifWorkerUrl=URL.createObjectURL(new Blob([txt],{type:'application/javascript'}));
+    return gifWorkerUrl;
+  }
+
+  async function exportGIF(){
+    if(!bgCache){ toast('먼저 사진을 넣어줘!'); return; }
+    if(typeof GIF==='undefined'){ toast('GIF 라이브러리 로딩 실패 — 새로고침해줘'); return; }
+    const gifBtn=$('gifBtn'); gifBtn.disabled=true;
+    const bar=$('gifbar'); bar.classList.add('show');
+    const prog=$('gifProg'); const msg=$('gifMsg');
+    msg.textContent='프레임 그리는 중…'; prog.style.width='5%';
+
+    try{
+      const worker=await ensureWorker();
+      const [W,H]=RATIOS[S.ratio];
+      const gif=new GIF({workers:2, quality:10, width:W, height:H, workerScript:worker, repeat:0});
+
+      const total=totalChars();
+      const frameCanvas=document.createElement('canvas'); frameCanvas.width=W; frameCanvas.height=H;
+      // we capture from the main canvas after each render
+      const stepChars=Math.max(1, Math.ceil(total/60)); // cap ~60 typing frames
+      const delay=S.typeSpeed*stepChars;
+
+      anim.playing=false; cancelAnimationFrame(anim.raf); cancelAnimationFrame(anim._blink);
+
+      for(let n=0; n<=total; n+=stepChars){
+        render(n);
+        gif.addFrame(ctx, {copy:true, delay:Math.max(30,delay)});
+        prog.style.width = (5 + (n/total)*55) + '%';
+      }
+      // hold full text frames + blink arrow a couple times
+      render(total); gif.addFrame(ctx,{copy:true, delay:900});
+      // arrow off frame (simulate blink) by temporarily disabling arrow
+      const keepArrow=S.showArrow; S.showArrow=false; render(total);
+      gif.addFrame(ctx,{copy:true, delay:350}); S.showArrow=keepArrow;
+      render(total); gif.addFrame(ctx,{copy:true, delay:900});
+
+      msg.textContent='인코딩 중… (조금 걸려)';
+      gif.on('progress', p=>{ prog.style.width=(60+p*40)+'%'; });
+      gif.on('finished', blob=>{
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(blob); a.download='tsukuru.gif'; a.click();
+        setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+        prog.style.width='100%'; msg.textContent='GIF 저장 완료!';
+        setTimeout(()=>bar.classList.remove('show'),1500);
+        gifBtn.disabled=false; toast('GIF 저장 완료!');
+        render(); // restore live (arrow blink)
+      });
+      gif.render();
+    }catch(e){
+      console.error(e); toast('GIF 생성 실패 — 콘솔 확인');
+      bar.classList.remove('show'); gifBtn.disabled=false;
+    }
+  }
+
+  // ---------------- bind UI ----------------
+  function bindRange(id, key, fmt, after){
+    const el=$(id), v=$(id+'V');
+    const upd=()=>{ S[key]=parseInt(el.value,10)* (key==='boxOpacity'?0.01:1);
+      if(key==='boxOpacity') S[key]=parseInt(el.value,10)/100;
+      v.textContent=fmt(el.value); if(after)after(); render(); };
+    el.addEventListener('input', upd); upd();
+  }
+
+  bindRange('pixelSize','pixelSize', v=>v+'px', ()=>{ rebuildBg(); rebuildFace(); });
+  bindRange('levels','levels', v=>v, ()=>{ rebuildBg(); rebuildFace(); });
+  $('boxOpacity').addEventListener('input', e=>{ S.boxOpacity=parseInt(e.target.value,10)/100; $('boxOpacityV').textContent=e.target.value+'%'; render(); });
+  bindRange('fontSize','fontSize', v=>v);
+  bindRange('typeSpeed','typeSpeed', v=>v);
+
+  ['dither','scanline','vignette','showArrow'].forEach(id=>{
+    $(id).addEventListener('change', e=>{ S[id]=e.target.checked;
+      if(id==='dither'){ rebuildBg(); rebuildFace(); } render(); });
+  });
+
+  $('dialogue').addEventListener('input', e=>{ S.dialogue=e.target.value; render(); });
+  $('speaker').addEventListener('input', e=>{ S.speaker=e.target.value; render(); });
+  $('nameColor').addEventListener('input', e=>{ S.nameColor=e.target.value; render(); });
+  $('choices').addEventListener('input', e=>{
+    S.choices=e.target.value.split('\n').map(s=>s.trim()).filter(Boolean).slice(0,4); render();
+  });
+  $('fontSel').addEventListener('change', e=>{ S.font=e.target.value; render(); });
+
+  // chips
+  function chips(id, key, attr, after){
+    $(id).addEventListener('click', e=>{
+      const c=e.target.closest('.chip'); if(!c) return;
+      [...$(id).children].forEach(x=>x.classList.remove('active'));
+      c.classList.add('active'); S[key]=c.dataset[attr]; if(after)after(); render();
+    });
+  }
+  chips('themeChips','theme','theme');
+  chips('faceSideChips','faceSide','side');
+  chips('ratioChips','ratio','ratio', ()=>{ rebuildBg(); });
+
+  // uploads
+  function wireUpload(zoneId, nameId, cb){
+    const z=$(zoneId);
+    const input=document.createElement('input'); input.type='file'; input.accept='image/*';
+    z.addEventListener('click', ()=>input.click());
+    input.addEventListener('change', ()=>{ if(input.files[0]) handle(input.files[0]); });
+    ['dragover','dragenter'].forEach(ev=>z.addEventListener(ev,e=>{e.preventDefault();z.classList.add('has');}));
+    ['dragleave','drop'].forEach(ev=>z.addEventListener(ev,e=>{e.preventDefault(); if(ev!=='drop')z.classList.remove('has');}));
+    z.addEventListener('drop', e=>{ const f=e.dataTransfer.files[0]; if(f) handle(f); });
+    function handle(file){
+      loadImageFromFile(file, im=>{ cb(im); z.classList.add('has'); $(nameId).textContent=file.name; render(); });
+    }
+    return input;
+  }
+  function updateFaceBtn(){ $('faceClear').textContent = S.faceImg ? '얼굴 제거' : '얼굴 추가'; }
+  wireUpload('bgUpload','bgName', im=>{ S.bgImg=im; rebuildBg(); });
+  const faceInput = wireUpload('faceUpload','faceName', im=>{ S.faceImg=im; rebuildFace(); updateFaceBtn(); });
+  $('faceClear').addEventListener('click', e=>{
+    e.stopPropagation();
+    if(S.faceImg){ S.faceImg=null; faceCache=null; $('faceName').textContent='없음'; $('faceUpload').classList.remove('has'); render(); updateFaceBtn(); }
+    else { faceInput.click(); }
+  });
+
+  // buttons
+  $('playBtn').addEventListener('click', ()=>{ if(!bgCache){toast('먼저 사진을 넣어줘!');return;} play(); });
+  $('fullBtn').addEventListener('click', showFull);
+  $('pngBtn').addEventListener('click', exportPNG);
+  $('gifBtn').addEventListener('click', exportGIF);
+
+  // demo filler (procedural image so it works with no upload)
+  $('randomBtn').addEventListener('click', ()=>{
+    const c=document.createElement('canvas'); c.width=400; c.height=300; const g=c.getContext('2d');
+    const sky=g.createLinearGradient(0,0,0,300); sky.addColorStop(0,'#243b8f'); sky.addColorStop(1,'#7c4fa0');
+    g.fillStyle=sky; g.fillRect(0,0,400,300);
+    g.fillStyle='#ffe9a8'; g.beginPath(); g.arc(310,70,34,0,Math.PI*2); g.fill();
+    g.fillStyle='#1b2a1c'; g.beginPath(); g.moveTo(0,300); g.lineTo(0,180);
+    for(let x=0;x<=400;x+=20){ g.lineTo(x, 180+Math.sin(x/40)*22+ (x%80<40?0:18)); }
+    g.lineTo(400,300); g.fill();
+    g.fillStyle='#0c160d'; g.fillRect(0,250,400,50);
+    const im=new Image(); im.onload=()=>{ S.bgImg=im; rebuildBg(); $('bgName').textContent='데모 풍경.png'; $('bgUpload').classList.add('has'); render(); play(); };
+    im.src=c.toDataURL();
+    S.dialogue="여기까지 오느라 고생 많았다, 용사여…\n이제 진짜 모험이 시작된다.";
+    $('dialogue').value=S.dialogue; S.speaker="???"; $('speaker').value="???";
+    toast('데모를 채웠어! ▶ 재생해봐');
+  });
+
+  // init
+  loadFonts();
+  render();
+})();
+</script>
+</body>
+</html>
