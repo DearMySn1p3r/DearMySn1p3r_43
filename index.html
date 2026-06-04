@@ -284,6 +284,13 @@
           <div class="chip" data-theme="parchment">양피지</div>
           <div class="chip" data-theme="rose">로즈</div>
           <div class="chip" data-theme="mono">흑백</div>
+          <div class="chip" data-theme="galge">미연시 핑크</div>
+          <div class="chip" data-theme="sky">청량 하늘</div>
+          <div class="chip" data-theme="mint">파스텔 민트</div>
+          <div class="chip" data-theme="neon">네온 사이버</div>
+          <div class="chip" data-theme="royal">왕실 골드</div>
+          <div class="chip" data-theme="gameboy">게임보이</div>
+          <div class="chip" data-theme="horror">고딕 호러</div>
         </div>
       </div>
 
@@ -423,6 +430,14 @@
     parchment: { fill:["#e8d6a8","#caa86a"], border:"#5a3d1c", inner:"#a07a3c", text:"#3a2a12", nameBox:"#b89a5c" },
     rose:      { fill:["#7a2046","#3d0f24"], border:"#ffd0e0", inner:"#ff7fb0", text:"#fff0f5", nameBox:"#4d1430" },
     mono:      { fill:["#202020","#000000"], border:"#ffffff", inner:"#888888", text:"#ffffff", nameBox:"#111111" },
+    // ── 미연시 / 컨셉추얼 ──
+    galge:     { fill:["#fff2f8","#ffd9ea"], border:"#ff8fc0", inner:"#ffb3d4", text:"#5a2742", nameBox:"#ff9ec8" }, // 미연시 핑크
+    sky:       { fill:["#e3f3ff","#bfe2ff"], border:"#5aa8e6", inner:"#9cd0f2", text:"#163a59", nameBox:"#a9d8f7" }, // 청량 하늘
+    neon:      { fill:["#1a0036","#06010f"], border:"#ff2bd6", inner:"#22e0ff", text:"#eafcff", nameBox:"#2a0552" }, // 네온 사이버
+    gameboy:   { fill:["#306230","#0f380f"], border:"#9bbc0f", inner:"#8bac0f", text:"#cfe89b", nameBox:"#0f380f" }, // 게임보이
+    royal:     { fill:["#3a1f6b","#190b38"], border:"#ffd86b", inner:"#b89cff", text:"#fff4d6", nameBox:"#26145a" }, // 왕실 골드
+    horror:    { fill:["#1a0606","#000000"], border:"#c41d1d", inner:"#5a1414", text:"#f0d2d2", nameBox:"#160404" }, // 고딕 호러
+    mint:      { fill:["#e9fff6","#c4f4e2"], border:"#3fc79a", inner:"#8fe3c5", text:"#0f4435", nameBox:"#aaf0d8" }, // 파스텔 민트
   };
 
   const RATIOS = { "4:3":[816,624], "16:9":[1024,576], "1:1":[720,720] };
@@ -884,8 +899,10 @@
     S.bgLocked = !S.bgLocked;
     $('lockBtn').textContent = S.bgLocked ? '🔒 잠금 해제' : '🔓 이동 잠금';
     $('lockBtn').classList.toggle('primary', S.bgLocked);
+    $('imgZoom').disabled = S.bgLocked;
+    $('imgReset').disabled = S.bgLocked;
     updateCanvasInteract();
-    toast(S.bgLocked ? '이미지 이동 잠금' : '이동 잠금 해제');
+    toast(S.bgLocked ? '이미지 완전 잠금 (줌·이동 불가)' : '잠금 해제');
   });
 
   let bgRaf=0;
@@ -911,7 +928,7 @@
   canvas.addEventListener('pointerup', endDrag);
   canvas.addEventListener('pointercancel', endDrag);
   canvas.addEventListener('wheel', e=>{
-    if(!S.bgImg) return; e.preventDefault();
+    if(!S.bgImg || S.bgLocked) return; e.preventDefault();
     setZoom(S.bgScale*(e.deltaY<0?1.12:1/1.12));
   }, {passive:false});
 
