@@ -207,7 +207,6 @@
   <div class="logo">▶ 쯔꾸르 <b>메이커</b></div>
   <div class="tag">사진 → 도트화 → 메시지 창 → 한 장의 RPG 스크린샷 / GIF</div>
   <div class="right">
-    <button class="btn" id="randomBtn">🎲 데모 구경</button>
   </div>
 </header>
 
@@ -583,6 +582,7 @@
 
   // ---------------- typewriter playback ----------------
   let anim={playing:false, t0:0, total:0, reveal:0, raf:0};
+  let capturing=false;
   function totalChars(){ return [...S.dialogue].length; }
 
   function play(){
@@ -598,6 +598,17 @@
     else { anim.playing=false; render(anim.total); }
   }
   function showFull(){ anim.playing=false; cancelAnimationFrame(anim.raf); render(totalChars()); }
+
+  // luminance of a #rrggbb color
+  function lum(hex){
+    const c=(hex||'').replace('#',''); if(c.length<6) return 200;
+    const r=parseInt(c.substr(0,2),16), g=parseInt(c.substr(2,2),16), b=parseInt(c.substr(4,2),16);
+    return 0.299*r+0.587*g+0.114*b;
+  }
+  // plain text, no outline/shadow — just the font
+  function outlineText(txt,x,y,main,o){
+    ctx.fillStyle=main; ctx.fillText(txt,x,y);
+  }
 
   // ---------------- main render ----------------
   function render(reveal){
@@ -666,8 +677,8 @@
       rr(ctx,nx,ny,nw,nh,8); ctx.fillStyle=th.nameBox; ctx.fill();
       ctx.globalAlpha=1;
       ctx.lineWidth=2; ctx.strokeStyle=th.border; rr(ctx,nx,ny,nw,nh,8); ctx.stroke();
-      ctx.fillStyle=S.nameColor; ctx.textBaseline='middle'; ctx.textAlign='left';
-      ctx.fillText(nm, nx+Math.round(W*0.02), ny+nh/2+1);
+      ctx.textBaseline='middle'; ctx.textAlign='left';
+      outlineText(nm, nx+Math.round(W*0.02), ny+nh/2+1, S.nameColor, 2);
     }
 
     // ----- dialogue text (with typewriter reveal) -----
@@ -687,9 +698,9 @@
         if(count>=rv){ done=false; break; }
         drawn+=chars[ci]; count++;
       }
-      // shadow for readability
-      ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillText(drawn, textX+2, ty+li*lineH+2);
-      ctx.fillStyle=th.text; ctx.fillText(drawn, textX, ty+li*lineH);
+      // crisp outline instead of muddy shadow
+      const ol = Math.max(2, Math.round(fs*0.07));
+      outlineText(drawn, textX, ty+li*lineH, th.text, ol);
       lastX=textX+ctx.measureText(drawn).width; lastY=ty+li*lineH;
       if(!done) break;
       if(ln!=='') count++; // count newline as a tick so reveal feels natural
@@ -716,21 +727,20 @@
           rr(ctx,cxp+6,cyp+Math.round(W*0.01)+chh*i+4,cw-12,chh-8,6); ctx.fill();
           ctx.fillStyle=th.border; ctx.fillText('▶', cxp+Math.round(W*0.018), yy);
         }
-        ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillText(c, cxp+Math.round(W*0.05)+2, yy+1);
-        ctx.fillStyle=th.text; ctx.fillText(c, cxp+Math.round(W*0.05), yy);
+        outlineText(c, cxp+Math.round(W*0.05), yy, th.text, Math.max(2,Math.round(cfs*0.07)));
       });
     }
 
     // ----- continue arrow ▼ (blink) -----
     if(done && S.showArrow && !S.choices.length){
-      const blink = Math.floor(performance.now()/450)%2===0;
+      const blink = capturing ? true : (Math.floor(performance.now()/450)%2===0);
       if(blink){
         ctx.fillStyle=th.border; ctx.textAlign='center'; ctx.textBaseline='alphabetic';
         ctx.font=cssFont(Math.round(fs*0.9));
         ctx.fillText('▼', bx+bw-Math.round(W*0.05), by+bh-Math.round(bh*0.14));
       }
-      // keep blinking alive in idle
-      if(!anim.playing){ cancelAnimationFrame(anim._blink); anim._blink=requestAnimationFrame(()=>render(reveal)); }
+      // keep blinking alive in idle (not while capturing a GIF)
+      if(!capturing && !anim.playing){ cancelAnimationFrame(anim._blink); anim._blink=requestAnimationFrame(()=>render(reveal)); }
     }
 
     // ----- scanlines over everything -----
@@ -787,22 +797,26 @@
       const delay=S.typeSpeed*stepChars;
 
       anim.playing=false; cancelAnimationFrame(anim.raf); cancelAnimationFrame(anim._blink);
+      capturing=true;
 
       for(let n=0; n<=total; n+=stepChars){
         render(n);
         gif.addFrame(ctx, {copy:true, delay:Math.max(30,delay)});
         prog.style.width = (5 + (n/total)*55) + '%';
       }
-      // hold full text frames + blink arrow a couple times
-      render(total); gif.addFrame(ctx,{copy:true, delay:900});
-      // arrow off frame (simulate blink) by temporarily disabling arrow
-      const keepArrow=S.showArrow; S.showArrow=false; render(total);
-      gif.addFrame(ctx,{copy:true, delay:350}); S.showArrow=keepArrow;
-      render(total); gif.addFrame(ctx,{copy:true, delay:900});
+      // hold full text, then blink the ▼ triangle a few times (looks selectable)
+      render(total); gif.addFrame(ctx,{copy:true, delay:600});
+      const keepArrow=S.showArrow;
+      for(let b=0;b<3;b++){
+        S.showArrow=false; render(total); gif.addFrame(ctx,{copy:true, delay:300});
+        S.showArrow=true;  render(total); gif.addFrame(ctx,{copy:true, delay:450});
+      }
+      S.showArrow=keepArrow;
 
       msg.textContent='인코딩 중… (조금 걸려)';
       gif.on('progress', p=>{ prog.style.width=(60+p*40)+'%'; });
       gif.on('finished', blob=>{
+        capturing=false;
         const a=document.createElement('a');
         a.href=URL.createObjectURL(blob); a.download='tsukuru.gif'; a.click();
         setTimeout(()=>URL.revokeObjectURL(a.href),1500);
@@ -813,6 +827,7 @@
       });
       gif.render();
     }catch(e){
+      capturing=false;
       console.error(e); toast('GIF 생성 실패 — 콘솔 확인');
       bar.classList.remove('show'); gifBtn.disabled=false;
     }
@@ -1018,14 +1033,10 @@
       setText('choices', d.choices.join('\n'));
       $('bgName').textContent=d.name+'.png'; $('bgUpload').classList.add('has');
       rebuildBg(); render(); play(); updateCanvasInteract();
-      toast('데모 '+demoIdx+'/'+DEMOS.length+' · '+d.name);
+      toast('🎬 '+d.name);
     };
     im.src=c.toDataURL();
   }
-  $('randomBtn').addEventListener('click', ()=>{
-    const d=DEMOS[demoIdx % DEMOS.length]; demoIdx++;
-    applyDemo(d);
-  });
 
   // init
   loadFonts();
