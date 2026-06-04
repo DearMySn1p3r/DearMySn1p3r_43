@@ -583,6 +583,7 @@
   // ---------------- typewriter playback ----------------
   let anim={playing:false, t0:0, total:0, reveal:0, raf:0};
   let capturing=false;
+  let blinkOn=true;
   function totalChars(){ return [...S.dialogue].length; }
 
   function play(){
@@ -706,6 +707,8 @@
       if(ln!=='') count++; // count newline as a tick so reveal feels natural
     }
 
+    const showBlink = capturing ? blinkOn : (Math.floor(performance.now()/450)%2===0);
+
     // ----- choices (only when fully revealed) -----
     if(done && S.choices.length){
       const cfs=Math.round(fs*0.92);
@@ -722,25 +725,22 @@
       ctx.textBaseline='middle';
       S.choices.forEach((c,i)=>{
         const yy=cyp+Math.round(W*0.01)+chh*i+chh/2;
-        if(i===0){ // cursor highlight on first
+        if(i===0){ // selected row highlight + blinking ▶ cursor
           ctx.fillStyle='rgba(255,255,255,0.12)';
           rr(ctx,cxp+6,cyp+Math.round(W*0.01)+chh*i+4,cw-12,chh-8,6); ctx.fill();
-          ctx.fillStyle=th.border; ctx.fillText('▶', cxp+Math.round(W*0.018), yy);
+          if(showBlink){ ctx.fillStyle=th.border; ctx.fillText('▶', cxp+Math.round(W*0.018), yy); }
         }
         outlineText(c, cxp+Math.round(W*0.05), yy, th.text, Math.max(2,Math.round(cfs*0.07)));
       });
     }
 
-    // ----- continue arrow ▼ (blink) -----
+    // ----- continue arrow ▼ (only when no choices) -----
     if(done && S.showArrow && !S.choices.length){
-      const blink = capturing ? true : (Math.floor(performance.now()/450)%2===0);
-      if(blink){
+      if(showBlink){
         ctx.fillStyle=th.border; ctx.textAlign='center'; ctx.textBaseline='alphabetic';
         ctx.font=cssFont(Math.round(fs*0.9));
         ctx.fillText('▼', bx+bw-Math.round(W*0.05), by+bh-Math.round(bh*0.14));
       }
-      // keep blinking alive in idle (not while capturing a GIF)
-      if(!capturing && !anim.playing){ cancelAnimationFrame(anim._blink); anim._blink=requestAnimationFrame(()=>render(reveal)); }
     }
 
     // ----- scanlines over everything -----
@@ -748,6 +748,12 @@
       ctx.globalAlpha=0.18; ctx.fillStyle='#000';
       for(let y=0;y<H;y+=3){ ctx.fillRect(0,y,W,1); }
       ctx.globalAlpha=1;
+    }
+
+    // keep blink alive in live idle (▶ when choices, else ▼)
+    if(done && !capturing && !anim.playing && (S.choices.length || S.showArrow)){
+      cancelAnimationFrame(anim._blink);
+      anim._blink=requestAnimationFrame(()=>render(reveal));
     }
   }
 
@@ -804,14 +810,13 @@
         gif.addFrame(ctx, {copy:true, delay:Math.max(30,delay)});
         prog.style.width = (5 + (n/total)*55) + '%';
       }
-      // hold full text, then blink the ▼ triangle a few times (looks selectable)
-      render(total); gif.addFrame(ctx,{copy:true, delay:600});
-      const keepArrow=S.showArrow;
+      // hold full text, then blink the cursor a few times (▶ if choices, else ▼)
+      blinkOn=true; render(total); gif.addFrame(ctx,{copy:true, delay:600});
       for(let b=0;b<3;b++){
-        S.showArrow=false; render(total); gif.addFrame(ctx,{copy:true, delay:300});
-        S.showArrow=true;  render(total); gif.addFrame(ctx,{copy:true, delay:450});
+        blinkOn=false; render(total); gif.addFrame(ctx,{copy:true, delay:300});
+        blinkOn=true;  render(total); gif.addFrame(ctx,{copy:true, delay:450});
       }
-      S.showArrow=keepArrow;
+      blinkOn=true;
 
       msg.textContent='인코딩 중… (조금 걸려)';
       gif.on('progress', p=>{ prog.style.width=(60+p*40)+'%'; });
