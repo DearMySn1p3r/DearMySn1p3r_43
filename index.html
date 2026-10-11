@@ -493,7 +493,8 @@
         <button class="btn primary block js-png">PNG 저장</button>
         <button class="btn block" id="copyBtn">클립보드에 복사</button>
         <button class="btn block js-gif">GIF 저장</button>
-        <div class="hint">GIF는 용량 문제로 최대 2×까지만 저장돼요.</div>
+        <button class="btn block js-gif" data-light="1">가벼운 GIF 저장 (트위터용)</button>
+        <div class="hint">GIF는 용량 문제로 최대 2×까지만 저장돼요.<br>가벼운 GIF는 크기를 줄이고 프레임 수를 줄여 용량을 크게 낮춰요. 스캔라인은 빠져요.</div>
       </div>
 
       <div class="group">
@@ -528,6 +529,7 @@
       <span class="sp"></span>
       <button class="btn sm js-png">PNG</button>
       <button class="btn sm js-gif">GIF</button>
+      <button class="btn sm js-gif" data-light="1" title="트위터용 가벼운 GIF">가벼운 GIF</button>
     </div>
 
     <div class="gifbar" id="gifbar">
@@ -1380,7 +1382,9 @@
   }
   const gifBtns = () => document.querySelectorAll(".js-gif");
 
-  async function exportGIF(){
+  let savedScanRef = null;
+  async function exportGIF(light){
+    light = light === true;
     if(!bgCache){ toast("먼저 사진을 넣어 주세요."); return; }
     if(typeof GIF === "undefined"){ toast("GIF 라이브러리를 불러오지 못했어요. 새로고침해 주세요."); return; }
     gifBtns().forEach(b=>b.disabled = true);
@@ -1391,14 +1395,20 @@
     try{
       const worker = await ensureWorker();
       const [W,H] = RATIOS[S.ratio];
-      const s = Math.min(Number(S.scale)||1, 2);
-      const gif = new GIF({ workers:2, quality:10, width:W*s, height:H*s, workerScript:worker, repeat:0 });
+      // light = Twitter-friendly: max 560px wide, fewer frames, no scanlines, coarser palette
+      const s = light ? Math.min(1, 560 / W) : Math.min(Number(S.scale)||1, 2);
+      const GW = Math.round(W*s), GH = Math.round(H*s);
+      const gif = new GIF({ workers:2, quality: light ? 20 : 10, width:GW, height:GH, workerScript:worker, repeat:0 });
       let sc = null, sg = null;
-      if(s > 1){ sc = document.createElement("canvas"); sc.width = W*s; sc.height = H*s; sg = sc.getContext("2d"); sg.imageSmoothingEnabled = false; }
+      if(s !== 1){ sc = document.createElement("canvas"); sc.width = GW; sc.height = GH; sg = sc.getContext("2d"); sg.imageSmoothingEnabled = s < 1; sg.imageSmoothingQuality = "high"; }
       const add = delay=>{
         if(s === 1) gif.addFrame(ctx, { copy:true, delay });
-        else { sg.clearRect(0,0,sc.width,sc.height); sg.drawImage(canvas,0,0,sc.width,sc.height); gif.addFrame(sg, { copy:true, delay }); }
+        else { sg.clearRect(0,0,GW,GH); sg.drawImage(canvas,0,0,GW,GH); gif.addFrame(sg, { copy:true, delay }); }
       };
+      const FR = light ? 100 : 60;           // animation frame step (ms)
+      const TYPE_MAX = light ? 18 : 60;      // max typing frames per page
+      const savedScan = S.scanline; savedScanRef = savedScan;
+      if(light) S.scanline = false;
 
       anim.playing = false; cancelAnimationFrame(anim.raf); cancelAnimationFrame(anim._blink);
       capturing = true;
@@ -1408,7 +1418,7 @@
       list.forEach((pi, idx)=>{
         S.page = pi;
         const total = pageTotal();
-        const stepChars = Math.max(1, Math.ceil(total/60));
+        const stepChars = Math.max(1, Math.ceil(total/TYPE_MAX));
         const delay = Math.max(30, S.typeSpeed*stepChars);
         const pops = (S.popupAll || pi === n-1) ? getPopups() : [];
         const withText = S.popupWhen === "with";
@@ -1416,7 +1426,7 @@
         const hasName = !!(getPages()[pi].speaker || "").trim();
         // intro: banner wipe + name tag bounce before the text starts
         const lead = (hasLoc || hasName) ? 360 : 0;
-        for(let t=0; t<lead; t+=60){ capLoc = hasLoc ? t : Infinity; capName = t; capPop = -1; render(0); add(60); }
+        for(let t=0; t<lead; t+=FR){ capLoc = hasLoc ? t : Infinity; capName = t; capPop = -1; render(0); add(FR); }
         for(let k=0; k<=total; k+=stepChars){
           const tt = k*S.typeSpeed;
           capName = lead + tt;
@@ -1430,15 +1440,15 @@
         const locLeft = hasLoc ? Math.max(0, LOC_IN - (lead + typeEnd)) : 0;
         const nameLeft = Math.max(0, NAME_IN - (lead + typeEnd));
         const tail = Math.max(popEnd - popStart, locLeft, nameLeft);
-        for(let t=0; t<=tail; t+=60){
+        for(let t=0; t<=tail; t+=FR){
           capName = lead + typeEnd + t;
           capPop = pops.length ? popStart + t : Infinity;
           capLoc = hasLoc ? lead + typeEnd + t : Infinity;
-          render(total); add(60);
+          render(total); add(FR);
         }
         capPop = Infinity; capLoc = Infinity; capName = Infinity;
         blinkOn = true; render(total); add(700);
-        const blinks = idx === list.length-1 ? 3 : 1;
+        const blinks = light ? 1 : (idx === list.length-1 ? 3 : 1);
         for(let b=0; b<blinks; b++){
           blinkOn = false; render(total); add(300);
           blinkOn = true;  render(total); add(450);
@@ -1446,21 +1456,25 @@
         prog.style.width = (5 + ((idx+1)/list.length)*55) + "%";
       });
       blinkOn = true; capPop = Infinity; capLoc = Infinity; capName = Infinity;
+      S.scanline = savedScan;
 
       msg.textContent = "인코딩 중이에요… 잠시만 기다려 주세요.";
       gif.on("progress", p=>{ prog.style.width = (60 + p*40) + "%"; });
       gif.on("finished", blob=>{
         capturing = false; S.page = startPage;
-        download(blob, `rpg-screenshot-${stamp()}.gif`);
-        prog.style.width = "100%"; msg.textContent = "GIF를 저장했어요.";
-        setTimeout(()=>bar.classList.remove("show"), 1500);
+        download(blob, `rpg-screenshot-${stamp()}${light ? "-light" : ""}.gif`);
+        const mb = (blob.size/1048576).toFixed(1);
+        const note = `GIF를 저장했어요. (${mb}MB)` + (blob.size > 15*1048576 ? " 트위터 제한(15MB)보다 커요. 대사를 줄이거나 페이지 수를 줄여 주세요." : "");
+        prog.style.width = "100%"; msg.textContent = note;
+        setTimeout(()=>bar.classList.remove("show"), 3000);
         gifBtns().forEach(b=>b.disabled = false);
-        toast("GIF를 저장했어요.");
+        toast(note);
         render();
       });
       gif.render();
     }catch(e){
       capturing = false; S.page = startPage;
+      if(light && typeof savedScanRef === "boolean") S.scanline = savedScanRef;
       console.error(e); toast("GIF를 만들지 못했어요. 다시 시도해 주세요.");
       bar.classList.remove("show"); gifBtns().forEach(b=>b.disabled = false);
       render();
@@ -1644,7 +1658,7 @@
   $("prevPage").addEventListener("click", ()=>goPage(S.page-1, false));
   $("nextPage").addEventListener("click", ()=>goPage(S.page+1, true));
   document.querySelectorAll(".js-png").forEach(b=>b.addEventListener("click", exportPNG));
-  document.querySelectorAll(".js-gif").forEach(b=>b.addEventListener("click", exportGIF));
+  document.querySelectorAll(".js-gif").forEach(b=>b.addEventListener("click", ()=>exportGIF(b.dataset.light === "1")));
   $("copyBtn").addEventListener("click", copyPNG);
   $("resetBtn").addEventListener("click", ()=>{
     if(!confirm("모든 설정과 대사를 초기화할까요?")) return;
