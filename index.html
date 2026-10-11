@@ -819,7 +819,7 @@
     lines.push(cur);
     return lines;
   }
-  function pageTotal(){ const p = getPages()[S.page] || getPages()[0]; return tokenize(p.text).length; }
+  function pageTotal(){ const p = getPages()[S.page] || getPages()[0]; return tokenize(p.text).filter(t=>t.ch!=="\n").length; }
   function getChoices(){ return S.choicesText.split("\n").map(s=>s.trim()).filter(Boolean).slice(0,4); }
 
   function fxText(str, x, y, color, fs, base, bold){
@@ -902,7 +902,7 @@
     if(!bgCache){ toast("먼저 사진을 넣어 주세요."); return; }
     cancelAnimationFrame(anim.raf); cancelAnimationFrame(anim._blink);
     const pg = getPages()[S.page];
-    anim.toks = tokenize(pg ? pg.text : "");
+    anim.toks = tokenize(pg ? pg.text : "").filter(t=>t.ch!=="\n");
     anim.playing = true; anim.t0 = performance.now(); anim.total = anim.toks.length; anim.reveal = 0;
     pop.state = S.popupWhen === "with" ? "run" : "pending"; pop.start = anim.t0;
     loc.state = "run"; loc.start = anim.t0;
@@ -1215,7 +1215,7 @@
         : (NS==="pill"||NS==="heart"||NS==="ribbon") ? Math.round(nh*0.3)
         : NS==="inline" ? Math.round(nfs*1.35) : 0);
       const rv = reveal==null ? Infinity : reveal;
-      done = rv >= tokens.length;
+      done = rv >= tokens.filter(t=>t.ch!=="\n").length;
       let count = 0;
       outer: for(let li=0; li<lines.length; li++){
         let x = textX;
@@ -1224,7 +1224,6 @@
           fxText(t.ch, x, ty+li*lineH, t.color || th.text, fs, th.text);
           x += t.w; count++;
         }
-        count++; // newline / soft break tick
       }
 
       // ----- choices (right-aligned window, blinking cursor bar) -----
